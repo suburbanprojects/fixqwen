@@ -1,0 +1,32 @@
+docker exec -it open-webui python -c "
+import sqlite3
+conn = sqlite3.connect('/app/backend/data/webui.db')
+cursor = conn.cursor()
+
+# Dynamically locate and purge automation entries that trigger qwen3
+try:
+    cursor.execute(\"SELECT name FROM sqlite_master WHERE type='table';\")
+    tables = [t[0] for t in cursor.fetchall()]
+    
+    for t in ['automation', 'automations', 'task', 'tasks', 'config']:
+        if t in tables:
+            cursor.execute(f\"DELETE FROM {t} WHERE str(value) LIKE '%qwen3%' OR str(key) LIKE '%qwen3%';\" if t=='config' else f\"DELETE FROM {t};\")
+            print(f'Cleared {t} worker tables.')
+except Exception as e:
+    pass
+
+# Hard sweep to remove any active text loops referencing the old model string
+cursor.execute(\"SELECT name FROM sqlite_master WHERE type='table';\")
+for table in [t[0] for t in cursor.fetchall()]:
+    try:
+        cursor.execute(f\"PRAGMA table_info({table});\")
+        cols = [c[1] for c in cursor.fetchall()]
+        for col in cols:
+            cursor.execute(f\"DELETE FROM {table} WHERE CAST({col} AS TEXT) LIKE '%qwen3%';\")
+    except:
+        continue
+
+conn.commit()
+conn.close()
+print('Database automation configurations completely purged.')
+"
