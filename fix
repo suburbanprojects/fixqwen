@@ -1,1 +1,28 @@
-docker exec -it open-webui python -c "import sqlite3; conn = sqlite3.connect('/app/backend/data/webui.db'); cursor = conn.cursor(); cursor.execute(\"DELETE FROM config WHERE value LIKE '%qwen3%';\"); print(f'Wiped config entries: {cursor.rowcount}'); cursor.execute(\"UPDATE user SET settings = NULL WHERE settings LIKE '%qwen3%';\"); print(f'Reset user configurations: {cursor.rowcount}'); conn.commit(); conn.close()"
+docker exec -it open-webui python -c "
+import sqlite3
+
+conn = sqlite3.connect('/app/backend/data/webui.db')
+cursor = conn.cursor()
+
+# Force wipe matching rows from config by inspecting available column names dynamically
+try:
+    cursor.execute(\"PRAGMA table_info(config);\")
+    columns = [col[1] for col in cursor.fetchall()]
+    value_col = 'value' if 'value' in columns else columns[1]
+    
+    # Target value based matching to catch any string containing qwen3
+    cursor.execute(f\"DELETE FROM config WHERE {value_col} LIKE '%qwen3%';\")
+    print(f'Wiped config entries: {cursor.rowcount}')
+except Exception as e:
+    print(f'Config sweep skipped or failed: {e}')
+
+# Reset user-specific layout dashboards that reference the old model
+try:
+    cursor.execute(\"UPDATE user SET settings = NULL WHERE settings LIKE '%qwen3%';\")
+    print(f'Reset user configurations: {cursor.rowcount}')
+except Exception as e:
+    print(f'User sweep skipped or failed: {e}')
+
+conn.commit()
+conn.close()
+"
